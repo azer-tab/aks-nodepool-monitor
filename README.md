@@ -1,7 +1,7 @@
 # aks-nodepool-monitor
 
 ## Overview
-The AKS Nodepool Monitor is a tool designed to detect provisioning failures in Azure Kubernetes Service (AKS) nodepools. It collects data from Azure and Kubernetes, analyzes it for potential issues, and generates reports to help users understand the state of their AKS environments.
+Basic provisioning failure detection for AKS nodepools using Azure and Kubernetes collectors, with analysis of subnet CIDR occupancy, nodepool provisioning states, and workload resilience. Generates JSON reports and console summaries with status indicators (OK/WARN/CRIT).
 
 ## Features
 - Collects AKS nodepool details including:
