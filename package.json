@@ -1,5 +1,6 @@
 {
   "name": "aks-nodepool-monitor",
+  "name": "@azer-tab/aks-nodepool-monitor"
   "version": "1.0.0",
   "description": "A tool to detect AKS nodepool provisioning failures and analyze workload resilience.",
   "main": "src/index.js",
