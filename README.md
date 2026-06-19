@@ -1,7 +1,7 @@
 # aks-nodepool-monitor
 
 ## Overview
-Basic provisioning failure detection for AKS nodepools using Azure and Kubernetes collectors, with analysis of subnet CIDR occupancy, nodepool provisioning states, and workload resilience. Generates JSON reports and console summaries with status indicators (OK/WARN/CRIT).
+AKS Nodepool Monitor helps platform teams detect nodepool provisioning risk before it becomes an outage by correlating AKS nodepool state, subnet IP pressure, autoscaler settings, and workload resilience into a simple JSON and console report.
 
 ## Features
 - Collects AKS nodepool details including:
