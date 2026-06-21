@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { AzureCollector } from './collectors/azure-collector';
 import { KubernetesCollector } from './collectors/kubernetes-collector';
 import { SubnetAnalyzer } from './analyzers/subnet-analyzer';
@@ -6,34 +7,43 @@ import { ResilienceAnalyzer } from './analyzers/resilience-analyzer';
 import { JsonReporter } from './reporters/json-reporter';
 import { ConsoleReporter } from './reporters/console-reporter';
 
-async function main() {
-    const azureCollector = new AzureCollector();
-    const kubernetesCollector = new KubernetesCollector();
 
-    const azureData = await azureCollector.collect();
-    const kubernetesData = await kubernetesCollector.collect();
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
 
-    const subnetAnalyzer = new SubnetAnalyzer(azureData);
-    const nodepoolAnalyzer = new NodepoolAnalyzer(azureData);
-    const resilienceAnalyzer = new ResilienceAnalyzer(kubernetesData);
+async function main(): Promise<void> {
 
-    const subnetAnalysis = subnetAnalyzer.analyze();
-    const nodepoolAnalysis = nodepoolAnalyzer.analyze();
-    const resilienceAnalysis = resilienceAnalyzer.analyze();
+  const subscriptionId = requiredEnv('AZURE_SUBSCRIPTION_ID');
+  const aksResourceGroup = requiredEnv('AKS_RESOURCE_GROUP');
+  const aksName = requiredEnv('AKS_CLUSTER_NAME');
 
-    const report = {
-        subnet: subnetAnalysis,
-        nodepool: nodepoolAnalysis,
-        resilience: resilienceAnalysis,
-    };
+  const azureCollector = new AzureCollector(subscriptionId, aksResourceGroup, aksName);
+  const kubernetesCollector = new KubernetesCollector();
 
-    const jsonReporter = new JsonReporter();
-    const consoleReporter = new ConsoleReporter();
+  const azureData = await azureCollector.collect();
+  const kubernetesData = await kubernetesCollector.collect();
 
-    await jsonReporter.report(report);
-    consoleReporter.report(report);
+  const subnetAnalyzer = new SubnetAnalyzer(azureData);
+  const nodepoolAnalyzer = new NodepoolAnalyzer(azureCollector, kubernetesCollector);
+  const resilienceAnalyzer = new ResilienceAnalyzer(kubernetesData);
+
+  const report = {
+    subnet: subnetAnalyzer.analyze(),
+    nodepool: await nodepoolAnalyzer.analyze(),
+    resilience: resilienceAnalyzer.analyze()
+  };
+
+  const jsonReporter = new JsonReporter(process.env.REPORT_PATH ?? 'report.json');
+  const consoleReporter = new ConsoleReporter();
+
+  await jsonReporter.report(report);
+  consoleReporter.report(report);
 }
 
 main().catch(error => {
-    console.error('Error running the AKS Nodepool Monitor:', error);
+  console.error('Error running the AKS Nodepool Monitor:', error);
+  process.exitCode = 1;
 });

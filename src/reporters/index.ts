@@ -1,4 +1,2 @@
-import { JsonReporter } from './json-reporter';
-import { ConsoleReporter } from './console-reporter';
-
-export { JsonReporter, ConsoleReporter };
+export { JsonReporter } from './json-reporter';
+export { ConsoleReporter } from './console-reporter';

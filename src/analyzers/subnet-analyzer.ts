@@ -1,36 +1,28 @@
+import { AzureData } from '../models/azure-data';
+
 export class SubnetAnalyzer {
-    private subnetId: string;
-    private usableIps: number;
-    private totalIps: number;
-    private usedIps: number;
+  constructor(private readonly azureData: AzureData) {}
 
-    constructor(subnetId: string, totalIps: number, usedIps: number) {
-        this.subnetId = subnetId;
-        this.totalIps = totalIps;
-        this.usedIps = usedIps;
-        this.usableIps = totalIps - usedIps;
-    }
+  public analyze() {
+    return this.azureData.subnets.map(subnet => {
+      const cidr = subnet.addressPrefix ?? subnet.cidr ?? '0.0.0.0/32';
+      const totalIps = this.calculateTotalIps(cidr);
+      const usedIps = subnet.ipConfigurations?.length ?? 0;
 
-    public analyze(): { subnetId: string; totalIps: number; usedIps: number; usableIps: number } {
-        return {
-            subnetId: this.subnetId,
-            totalIps: this.totalIps,
-            usedIps: this.usedIps,
-            usableIps: this.usableIps,
-        };
-    }
+      return {
+        subnetId: subnet.id,
+        cidr,
+        totalIps,
+        usedIps,
+        usableIps: Math.max(totalIps - usedIps, 0)
+      };
+    });
+  }
 
-    public static fromAzureData(subnetData: any): SubnetAnalyzer {
-        const subnetId = subnetData.id;
-        const totalIps = subnetData.addressPrefix ? this.calculateTotalIps(subnetData.addressPrefix) : 0;
-        const usedIps = subnetData.ipConfigurations ? subnetData.ipConfigurations.length : 0;
-
-        return new SubnetAnalyzer(subnetId, totalIps, usedIps);
-    }
-
-    private static calculateTotalIps(cidr: string): number {
-        const parts = cidr.split('/');
-        const subnetMask = parseInt(parts[1], 10);
-        return Math.pow(2, 32 - subnetMask);
-    }
+  private calculateTotalIps(cidr: string): number {
+    const [, mask] = cidr.split('/');
+    const subnetMask = Number(mask);
+    if (!Number.isInteger(subnetMask) || subnetMask < 0 || subnetMask > 32) return 0;
+    return Math.pow(2, 32 - subnetMask);
+  }
 }

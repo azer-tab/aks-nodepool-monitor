@@ -1,39 +1,24 @@
+import { KubernetesData, NodeSummary } from '../collectors/kubernetes-collector';
+
 export class ResilienceAnalyzer {
-    private kubernetesData: any;
+  constructor(private readonly kubernetesData: KubernetesData) {}
 
-    constructor(kubernetesData: any) {
-        this.kubernetesData = kubernetesData;
-    }
+  public analyze() {
+    return {
+      deploymentsWithSingleReplica: this.kubernetesData.deployments,
+      podDisruptionBudgets: this.kubernetesData.pdbs,
+      nodesPerAgentPool: this.mapNodesToAgentPools()
+    };
+  }
 
-    public analyze() {
-        const results = {
-            deploymentsWithSingleReplica: this.getDeploymentsWithSingleReplica(),
-            podDisruptionBudgets: this.checkPodDisruptionBudgets(),
-            nodesPerAgentPool: this.mapNodesToAgentPools(),
-        };
+  private mapNodesToAgentPools(): Record<string, number> {
+    const nodePoolMapping: Record<string, number> = {};
 
-        return results;
-    }
+    this.kubernetesData.nodes.forEach((node: NodeSummary) => {
+      const poolName = node.labels.agentpool ?? node.labels['kubernetes.azure.com/agentpool'] ?? 'unknown';
+      nodePoolMapping[poolName] = (nodePoolMapping[poolName] || 0) + 1;
+    });
 
-    private getDeploymentsWithSingleReplica() {
-        return this.kubernetesData.deployments.filter((deployment: any) => deployment.spec.replicas === 1);
-    }
-
-    private checkPodDisruptionBudgets() {
-        return this.kubernetesData.namespaces.map((namespace: any) => {
-            return {
-                namespace: namespace.name,
-                hasPDB: namespace.podDisruptionBudget ? true : false,
-            };
-        });
-    }
-
-    private mapNodesToAgentPools() {
-        const nodePoolMapping: { [key: string]: number } = {};
-        this.kubernetesData.nodes.forEach((node: any) => {
-            const poolName = node.metadata.labels['agentpool'];
-            nodePoolMapping[poolName] = (nodePoolMapping[poolName] || 0) + 1;
-        });
-        return nodePoolMapping;
-    }
+    return nodePoolMapping;
+  }
 }
