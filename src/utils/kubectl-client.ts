@@ -9,7 +9,7 @@ export class KubectlClient {
         const command = `${this.kubectlPath} get deployments -n ${namespace} -o json`;
         const result = await this.executeCommand(command);
         const deployments = result.items || [];
-        return deployments.filter(deployment => deployment.spec.replicas === 1);
+        return deployments.filter((deployment: any) => deployment.spec.replicas === 1);
     }
 
     public async getPodDisruptionBudgets(namespace: string): Promise<any[]> {

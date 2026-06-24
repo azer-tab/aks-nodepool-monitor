@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import 'dotenv/config';
 import { AzureCollector } from './collectors/azure-collector';
 import { KubernetesCollector } from './collectors/kubernetes-collector';
@@ -6,21 +7,28 @@ import { NodepoolAnalyzer } from './analyzers/nodepool-analyzer';
 import { ResilienceAnalyzer } from './analyzers/resilience-analyzer';
 import { JsonReporter } from './reporters/json-reporter';
 import { ConsoleReporter } from './reporters/console-reporter';
+import { buildConfig } from './config';
+import { formatHelp, parseCliArgs } from './cli';
 
+const packageJson = require('../package.json') as { name: string; version: string };
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
-}
+export async function run(argv: string[] = process.argv.slice(2)): Promise<void> {
+  const parsed = parseCliArgs(argv);
+  const commandName = 'aks-nodepool-monitor';
 
-async function main(): Promise<void> {
+  if (parsed.helpRequested) {
+    console.log(formatHelp(commandName, packageJson.version));
+    return;
+  }
 
-  const subscriptionId = requiredEnv('AZURE_SUBSCRIPTION_ID');
-  const aksResourceGroup = requiredEnv('AKS_RESOURCE_GROUP');
-  const aksName = requiredEnv('AKS_CLUSTER_NAME');
+  if (parsed.versionRequested) {
+    console.log(packageJson.version);
+    return;
+  }
 
-  const azureCollector = new AzureCollector(subscriptionId, aksResourceGroup, aksName);
+  const config = buildConfig(parsed.options, process.env);
+
+  const azureCollector = new AzureCollector(config.subscriptionId, config.resourceGroup, config.clusterName);
   const kubernetesCollector = new KubernetesCollector();
 
   const azureData = await azureCollector.collect();
@@ -36,14 +44,20 @@ async function main(): Promise<void> {
     resilience: resilienceAnalyzer.analyze()
   };
 
-  const jsonReporter = new JsonReporter(process.env.REPORT_PATH ?? 'report.json');
-  const consoleReporter = new ConsoleReporter();
-
+  const jsonReporter = new JsonReporter(config.reportPath);
   await jsonReporter.report(report);
-  consoleReporter.report(report);
+
+  if (config.printConsole) {
+    const consoleReporter = new ConsoleReporter();
+    consoleReporter.report(report);
+  }
 }
 
-main().catch(error => {
-  console.error('Error running the AKS Nodepool Monitor:', error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  run().catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error running AKS Nodepool Monitor: ${message}`);
+    console.error('Run `aks-nodepool-monitor --help` for usage.');
+    process.exitCode = 1;
+  });
+}

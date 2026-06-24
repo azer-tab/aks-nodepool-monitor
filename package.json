@@ -1,7 +1,7 @@
 {
   "name": "@azer-tab/aks-nodepool-monitor",
   "version": "1.0.0",
-  "description": "A tool to detect AKS nodepool provisioning failures and analyze workload resilience.",
+  "description": "CLI tool to detect AKS node pool provisioning issues and analyze workload resilience.",
   "main": "dist/index.js",
   "bin": {
     "aks-nodepool-monitor": "dist/index.js"
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "jest --passWithNoTests"
+    "dev": "ts-node src/index.ts",
+    "test": "jest --passWithNoTests",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@azure/arm-containerservice": "^22.2.0",
@@ -30,5 +32,20 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "keywords": [
+    "aks",
+    "azure",
+    "kubernetes",
+    "nodepool",
+    "cli",
+    "monitoring"
+  ]
 }
