@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  aks-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aks-nodepool-monitor
+    environment:
+      # Mount these from host or pass via env_file
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
+      AKS_RESOURCE_GROUP: ${AKS_RESOURCE_GROUP:-}
+      AKS_CLUSTER_NAME: ${AKS_CLUSTER_NAME:-}
+      REPORT_PATH: ${REPORT_PATH:-/app/reports/report.json}
+      PRINT_CONSOLE: ${PRINT_CONSOLE:-true}
+    volumes:
+      # Mount kubeconfig for kubectl access
+      - ${KUBECONFIG:-~/.kube/config}:/root/.kube/config:ro
+      # Mount Azure CLI credentials if using service principal or cached login
+      - ${HOME}/.azure:/root/.azure:ro
+      # Mount output directory for reports
+      - ./reports:/app/reports
+    # Uncomment to use an .env file
+    # env_file:
+    #   - .env.docker
+    # Override entrypoint for interactive testing
+    # entrypoint: /bin/sh
+    # stdin_open: true
+    # tty: true
