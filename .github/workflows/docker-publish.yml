@@ -40,6 +40,4 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:${{ steps.timestamp.outputs.value }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:${{ github.sha }}
