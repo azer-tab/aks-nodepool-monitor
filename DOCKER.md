@@ -1,329 +1,716 @@
 # Dockerizing AKS Nodepool Monitor
 
-This guide covers building, running, and deploying the AKS Nodepool Monitor in Docker.
+This guide explains how to build, run, test, and publish the AKS Nodepool Monitor Docker image.
+
+The Docker image contains:
+
+* Node.js runtime
+* The compiled AKS Nodepool Monitor application
+* Azure CLI
+* kubectl
+
+The image can be used to test the monitor locally against an AKS cluster, including clusters created in the KodeKloud Azure Playground.
+
+---
 
 ## Prerequisites
 
-- Docker 20.10+
-- Docker Compose 2.0+ (optional, for local development)
-- For running the container, you'll need valid Azure and Kubernetes credentials
+Before using the Docker image, make sure you have:
 
-## Build the Image
+* Docker 20.10+
+* A valid Azure CLI login on your host machine
+* Access to the target Azure subscription and resource group
+* A working AKS cluster, or permission to create one
+* A local kubeconfig directory at `~/.kube`
+* A local Azure CLI config directory at `~/.azure`
 
-### Build locally
+Authenticate with Azure on your host machine first:
+
+```bash
+az login
+az account show -o table
+```
+
+Set the resource group and AKS cluster name:
+
+```bash
+export RG="<your-resource-group>"
+export AKS="kk-aks"
+```
+
+For the KodeKloud Azure Playground, the resource group name may change between sessions. Always verify it:
+
+```bash
+az group list -o table
+```
+
+---
+
+## Build the Image Locally
+
+Build the image with the default local tag:
 
 ```bash
 docker build -t aks-nodepool-monitor:latest .
 ```
 
-### Build with a specific tag
+Build with a custom version tag:
 
 ```bash
 docker build -t aks-nodepool-monitor:1.0.0 .
 ```
 
-### Build with BuildKit (faster, better caching)
+Build with Docker BuildKit enabled:
 
 ```bash
 DOCKER_BUILDKIT=1 docker build -t aks-nodepool-monitor:latest .
 ```
 
-## Run the Container
-
-The container requires:
-- Azure credentials (via `az login` or environment variables)
-- Kubernetes credentials (kubeconfig)
-
-### Option 1: Using Docker with mounted credentials
-
-```bash
-docker run --rm \
-  -e AZURE_SUBSCRIPTION_ID="your-subscription-id" \
-  -e AKS_RESOURCE_GROUP="your-resource-group" \
-  -e AKS_CLUSTER_NAME="your-cluster-name" \
-  -v ~/.kube/config:/root/.kube/config:ro \
-  -v ~/.azure:/root/.azure:ro \
-  -v $(pwd)/reports:/app/reports \
-  aks-nodepool-monitor:latest
-```
-
-### Option 2: Using Docker Compose (recommended for local testing)
-
-1. Set up your environment file:
-
-```bash
-cp .env.example .env.docker
-# Edit .env.docker with your values
-cat .env.docker
-```
-
-Example `.env.docker`:
-```env
-AZURE_SUBSCRIPTION_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AKS_RESOURCE_GROUP=my-resource-group
-AKS_CLUSTER_NAME=my-cluster
-REPORT_PATH=/app/reports/report.json
-PRINT_CONSOLE=true
-```
-
-2. Run with docker-compose:
-
-```bash
-docker-compose up --build
-```
-
-Or without rebuilding:
-
-```bash
-docker-compose up
-```
-
-### Option 3: Using Azure CLI authentication
-
-If you have a local Azure CLI session, mount it into the container:
-
-```bash
-docker run --rm \
-  -v ~/.azure:/root/.azure:ro \
-  -v ~/.kube/config:/root/.kube/config:ro \
-  -v $(pwd)/reports:/app/reports \
-  -e AKS_RESOURCE_GROUP="my-resource-group" \
-  -e AKS_CLUSTER_NAME="my-cluster" \
-  aks-nodepool-monitor:latest
-```
-
-### Option 4: Interactive debugging
-
-Enter a shell inside the container:
-
-```bash
-docker run --rm -it \
-  -v ~/.kube/config:/root/.kube/config:ro \
-  -v ~/.azure:/root/.azure:ro \
-  --entrypoint /bin/sh \
-  aks-nodepool-monitor:latest
-```
-
-Then run commands manually:
-
-```bash
-node dist/index.js --subscription-id xxx --resource-group yyy --cluster-name zzz
-```
-
-## Output and Reports
-
-Reports are written to the path specified by `REPORT_PATH` (default: `report.json`).
-
-To capture reports outside the container, mount a volume:
-
-```bash
--v $(pwd)/reports:/app/reports
-```
-
-After the container exits, reports are available in your local `./reports` directory.
-
-## Publishing to a Registry
-
-### Docker Hub
-
-```bash
-docker tag aks-nodepool-monitor:latest your-username/aks-nodepool-monitor:latest
-docker push your-username/aks-nodepool-monitor:latest
-```
-
-### GitHub Container Registry (GHCR)
-
-```bash
-docker tag aks-nodepool-monitor:latest ghcr.io/azer-tab/aks-nodepool-monitor:latest
-docker login ghcr.io
-docker push ghcr.io/azer-tab/aks-nodepool-monitor:latest
-```
-
-### Azure Container Registry (ACR)
-
-```bash
-az acr login --name your-acr-name
-docker tag aks-nodepool-monitor:latest your-acr-name.azurecr.io/aks-nodepool-monitor:latest
-docker push your-acr-name.azurecr.io/aks-nodepool-monitor:latest
-```
-
-## CI/CD Integration
-
-### GitHub Actions Example
-
-Add this workflow to `.github/workflows/docker-build.yml`:
-
-```yaml
-name: Build and Push Docker Image
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build image
-        run: docker build -t image:${{ github.ref_name }} .
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push to GHCR
-        run: |
-          docker tag image:${{ github.ref_name }} ghcr.io/azer-tab/aks-nodepool-monitor:${{ github.ref_name }}
-          docker push ghcr.io/azer-tab/aks-nodepool-monitor:${{ github.ref_name }}
-```
-
-## Deployment to Kubernetes
-
-While this tool is a CLI (not a long-running service), you can deploy it as a one-shot Pod or CronJob:
-
-### One-shot Pod
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: aks-monitor-job
-spec:
-  serviceAccountName: aks-monitor-sa
-  containers:
-    - name: aks-monitor
-      image: aks-nodepool-monitor:latest
-      env:
-        - name: AZURE_SUBSCRIPTION_ID
-          valueFrom:
-            secretKeyRef:
-              name: aks-monitor-secrets
-              key: subscription-id
-        - name: AKS_RESOURCE_GROUP
-          value: "my-resource-group"
-        - name: AKS_CLUSTER_NAME
-          value: "my-cluster"
-      volumeMounts:
-        - name: reports
-          mountPath: /app/reports
-  volumes:
-    - name: reports
-      emptyDir: {}
-  restartPolicy: Never
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: aks-monitor-sa
+
+## Pull the Published Image
+
+If the image is published to Docker Hub, pull it with:
+
+```bash
+docker pull azertab/aks-nodepool-monitor:latest
 ```
 
-### CronJob (periodic health checks)
+For a timestamped build:
 
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: aks-monitor-daily
-spec:
-  schedule: "0 8 * * *"  # Daily at 8 AM
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: aks-monitor-sa
-          containers:
-            - name: aks-monitor
-              image: aks-nodepool-monitor:latest
-              env:
-                - name: AKS_RESOURCE_GROUP
-                  value: "my-resource-group"
-                - name: AKS_CLUSTER_NAME
-                  value: "my-cluster"
-                - name: REPORT_PATH
-                  value: "/app/reports/report-$(date +%Y%m%d).json"
-              volumeMounts:
-                - name: reports
-                  mountPath: /app/reports
-          volumes:
-            - name: reports
-              persistentVolumeClaim:
-                claimName: aks-monitor-reports-pvc
-          restartPolicy: OnFailure
+```bash
+docker pull azertab/aks-nodepool-monitor:<timestamp-tag>
 ```
 
-## Troubleshooting
+Example:
 
-### "Azure authentication failure"
+```bash
+docker pull azertab/aks-nodepool-monitor:20260625-120012
+```
 
-Ensure your Azure credentials are mounted and valid:
+---
+
+## Verify the Image
+
+Check that the image exists locally:
+
+```bash
+docker images | grep aks-nodepool-monitor
+```
+
+Verify that Azure CLI is available inside the container:
 
 ```bash
 docker run --rm \
-  -v ~/.azure:/root/.azure:ro \
+  -v ~/.azure:/root/.azure \
   --entrypoint az \
-  aks-nodepool-monitor:latest \
+  azertab/aks-nodepool-monitor:latest \
   account show
 ```
 
-### "kubectl: not found" or connection errors
+Important: do not mount `~/.azure` as read-only. Azure CLI writes cache, log, and metadata files under `/root/.azure`, even for read-only commands such as `az account show`.
 
-Ensure your kubeconfig is mounted:
+Verify that kubectl is available inside the container:
 
 ```bash
 docker run --rm \
   -v ~/.kube/config:/root/.kube/config:ro \
   --entrypoint kubectl \
-  aks-nodepool-monitor:latest \
-  config current-context
+  azertab/aks-nodepool-monitor:latest \
+  version --client
 ```
 
-### Image size is too large
-
-The production image includes `azure-cli` and `kubectl` for convenience. If you want a minimal image:
-
-1. Use the base Node.js image without these tools
-2. Have users provide them on the host and mount `/usr/local/bin`
-
-Let me know if you'd like a minimal variant.
-
-### Permission denied errors
-
-Some Docker hosts restrict certain operations. Try running with `--cap-add=NET_RAW` if needed:
+Verify Kubernetes access:
 
 ```bash
-docker run --rm --cap-add=NET_RAW \
+docker run --rm \
   -v ~/.kube/config:/root/.kube/config:ro \
-  aks-nodepool-monitor:latest
+  --entrypoint kubectl \
+  azertab/aks-nodepool-monitor:latest \
+  get nodes
 ```
 
-## Image Size Optimization
+---
 
-Current image includes:
-- Node.js runtime (~180 MB)
-- Azure CLI (~300 MB)
-- kubectl (~150 MB)
+## Recommended Local Test Workflow
 
-Total: ~630 MB
+This command performs the full local test workflow from inside the container.
 
-To reduce, consider:
-- Using a distroless Node.js image (saves ~50 MB)
-- Removing development dependencies (already done with `--only=production`)
-- Using a separate sidecar pattern in Kubernetes for Azure/k8s binaries
+It will:
 
-## Next Steps
+1. Verify Azure authentication.
+2. Select the target subscription.
+3. Detect the resource group location.
+4. Check whether the AKS cluster already exists.
+5. Create the AKS cluster if it does not exist.
+6. Refresh kubeconfig using AKS admin credentials.
+7. Verify Kubernetes access with `kubectl get nodes`.
+8. Run the AKS Nodepool Monitor.
+9. Write the report to `./reports/report.json`.
 
-1. **Test locally**: `docker build -t test . && docker-compose up`
-2. **Push to registry**: Publish to Docker Hub, GHCR, or ACR
-3. **Set up CI/CD**: GitHub Actions workflow to auto-build on releases
-4. **Deploy to Kubernetes**: Use the Pod or CronJob manifests above
+Create the reports directory:
+
+```bash
+mkdir -p reports
+```
+
+Run the full workflow:
+
+```bash
+docker run --rm \
+  -v ~/.azure:/root/.azure \
+  -v ~/.kube:/root/.kube \
+  -v "$(pwd)/reports:/app/reports" \
+  --entrypoint /bin/sh \
+  azertab/aks-nodepool-monitor:latest \
+  -c '
+    set -e
+
+    SUBSCRIPTION_ID="a2b28c85-1948-4263-90ca-bade2bac4df4"
+    RG="'"$RG"'"
+    AKS="'"$AKS"'"
+
+    echo "Using resource group: $RG"
+    echo "Using AKS cluster: $AKS"
+
+    echo "Checking Azure login..."
+    az account show >/dev/null
+
+    echo "Setting Azure subscription..."
+    az account set --subscription "$SUBSCRIPTION_ID"
+
+    echo "Detecting resource group location..."
+    LOCATION=$(az group show --name "$RG" --query location -o tsv)
+
+    echo "Checking whether AKS cluster exists..."
+    if az aks show \
+      --resource-group "$RG" \
+      --name "$AKS" \
+      >/dev/null 2>&1; then
+      echo "AKS cluster already exists."
+    else
+      echo "AKS cluster does not exist. Creating it..."
+
+      az aks create \
+        --resource-group "$RG" \
+        --name "$AKS" \
+        --location "$LOCATION" \
+        --node-count 1 \
+        --node-vm-size Standard_D2s_v3 \
+        --nodepool-name nodepool1 \
+        --enable-managed-identity \
+        --enable-aad \
+        --tier free \
+        --network-plugin azure \
+        --network-plugin-mode overlay \
+        --generate-ssh-keys
+    fi
+
+    echo "Refreshing AKS admin kubeconfig..."
+    az aks get-credentials \
+      --resource-group "$RG" \
+      --name "$AKS" \
+      --admin \
+      --overwrite-existing
+
+    echo "Verifying Kubernetes access..."
+    kubectl get nodes
+
+    echo "Running AKS Nodepool Monitor..."
+    node /app/dist/index.js \
+      --subscription-id "$SUBSCRIPTION_ID" \
+      --resource-group "$RG" \
+      --cluster-name "$AKS" \
+      --report-path "/app/reports/report.json" \
+      --print-console
+  '
+```
+
+---
+
+## Why These Volumes Are Mounted
+
+The recommended command uses these mounts:
+
+```bash
+-v ~/.azure:/root/.azure
+-v ~/.kube:/root/.kube
+-v "$(pwd)/reports:/app/reports"
+```
+
+### Azure credentials
+
+```bash
+-v ~/.azure:/root/.azure
+```
+
+This shares the host Azure CLI login with the container.
+
+It must be mounted read/write because Azure CLI writes files such as:
+
+* `versionCheck.json`
+* `extensionIndex.json`
+* command logs under `commands/`
+
+Do not use:
+
+```bash
+-v ~/.azure:/root/.azure:ro
+```
+
+That can cause errors such as:
+
+```text
+Read-only file system: '/root/.azure/versionCheck.json'
+```
+
+### Kubernetes credentials
+
+```bash
+-v ~/.kube:/root/.kube
+```
+
+This allows the container to update kubeconfig using:
+
+```bash
+az aks get-credentials --admin --overwrite-existing
+```
+
+This mount must be writable for the full workflow because the container updates kubeconfig.
+
+For read-only kubectl checks, this is enough:
+
+```bash
+-v ~/.kube/config:/root/.kube/config:ro
+```
+
+### Reports
+
+```bash
+-v "$(pwd)/reports:/app/reports"
+```
+
+This makes the generated report available on the host after the container exits.
+
+The monitor writes to:
+
+```bash
+/app/reports/report.json
+```
+
+which appears locally as:
+
+```bash
+./reports/report.json
+```
+
+---
+
+## Running the Monitor Against an Existing Cluster
+
+If the AKS cluster already exists and kubeconfig is already configured, you can run only the monitor:
+
+```bash
+mkdir -p reports
+
+docker run --rm \
+  -v ~/.azure:/root/.azure \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  -v "$(pwd)/reports:/app/reports" \
+  azertab/aks-nodepool-monitor:latest \
+  --subscription-id "a2b28c85-1948-4263-90ca-bade2bac4df4" \
+  --resource-group "$RG" \
+  --cluster-name "$AKS" \
+  --report-path "/app/reports/report.json" \
+  --print-console
+```
+
+---
+
+## KodeKloud Azure Playground Notes
+
+The KodeKloud Azure Playground usually enforces strict AKS policies.
+
+The tested cluster creation settings are:
+
+```bash
+az aks create \
+  --resource-group "$RG" \
+  --name "$AKS" \
+  --location "$LOCATION" \
+  --node-count 1 \
+  --node-vm-size Standard_D2s_v3 \
+  --nodepool-name nodepool1 \
+  --enable-managed-identity \
+  --enable-aad \
+  --tier free \
+  --network-plugin azure \
+  --network-plugin-mode overlay \
+  --generate-ssh-keys
+```
+
+Known playground constraints:
+
+* Maximum node pools: 1
+* Maximum nodes: 2
+* Container Insights disabled
+* Alerting disabled
+* Use allowed VM sizes only, such as `Standard_D2s_v3`
+
+Do not enable monitoring:
+
+```bash
+--enable-addons monitoring
+```
+
+The playground may reject the deployment if monitoring or unsupported VM sizes are used.
+
+---
+
+## AAD-Enabled AKS Credentials
+
+The cluster is created with:
+
+```bash
+--enable-aad
+```
+
+With AAD-enabled AKS clusters, normal user credentials may not have Kubernetes RBAC permissions to list nodes or pods.
+
+If you see an error like:
+
+```text
+Error from server (Forbidden): nodes is forbidden
+```
+
+refresh kubeconfig with admin credentials:
+
+```bash
+az aks get-credentials \
+  --resource-group "$RG" \
+  --name "$AKS" \
+  --admin \
+  --overwrite-existing
+```
+
+The recommended Docker workflow already does this automatically.
+
+---
+
+## Output
+
+After a successful run, the report is written to:
+
+```bash
+./reports/report.json
+```
+
+View it with:
+
+```bash
+cat reports/report.json
+```
+
+Or pretty-print it:
+
+```bash
+cat reports/report.json | jq
+```
+
+---
+
+## Interactive Debugging
+
+Open a shell inside the container:
+
+```bash
+docker run --rm -it \
+  -v ~/.azure:/root/.azure \
+  -v ~/.kube:/root/.kube \
+  -v "$(pwd)/reports:/app/reports" \
+  --entrypoint /bin/sh \
+  azertab/aks-nodepool-monitor:latest
+```
+
+Inside the container, you can run:
+
+```bash
+az account show
+kubectl get nodes
+node /app/dist/index.js --help
+```
+
+Run the monitor manually:
+
+```bash
+node /app/dist/index.js \
+  --subscription-id "a2b28c85-1948-4263-90ca-bade2bac4df4" \
+  --resource-group "$RG" \
+  --cluster-name "$AKS" \
+  --report-path "/app/reports/report.json" \
+  --print-console
+```
+
+---
+
+## Publishing to Docker Hub
+
+Tag the local image:
+
+```bash
+docker tag aks-nodepool-monitor:latest azertab/aks-nodepool-monitor:latest
+```
+
+Login to Docker Hub:
+
+```bash
+docker login
+```
+
+Push the image:
+
+```bash
+docker push azertab/aks-nodepool-monitor:latest
+```
+
+---
+
+## GitHub Actions Publishing
+
+A typical GitHub Actions workflow should:
+
+1. Build the image.
+2. Tag it as `latest`.
+3. Tag it with a timestamp.
+4. Optionally tag it with the Git commit SHA.
+5. Push it to Docker Hub.
+
+Example tags:
+
+```text
+azertab/aks-nodepool-monitor:latest
+azertab/aks-nodepool-monitor:20260625-120012
+azertab/aks-nodepool-monitor:<commit-sha>
+```
+
+For Apple Silicon compatibility, build a multi-architecture image:
+
+```yaml
+platforms: linux/amd64,linux/arm64
+```
+
+For faster testing on Apple Silicon only:
+
+```yaml
+platforms: linux/arm64
+```
+
+---
+
+## Troubleshooting
+
+### Docker says `invalid reference format`
+
+This usually means the image tag variable is empty or malformed.
+
+Check:
+
+```bash
+echo "TAG=[$TAG]"
+```
+
+Use `latest` explicitly:
+
+```bash
+docker run --rm azertab/aks-nodepool-monitor:latest --help
+```
+
+---
+
+### Docker cannot find `aks-nodepool-monitor:latest`
+
+This happens when you run the local image name but only pulled the Docker Hub image.
+
+Use:
+
+```bash
+azertab/aks-nodepool-monitor:latest
+```
+
+not:
+
+```bash
+aks-nodepool-monitor:latest
+```
+
+Or retag it locally:
+
+```bash
+docker tag azertab/aks-nodepool-monitor:latest aks-nodepool-monitor:latest
+```
+
+---
+
+### `no matching manifest for linux/arm64/v8`
+
+This happens on Apple Silicon Macs if the image was built only for `linux/amd64`.
+
+Quick workaround:
+
+```bash
+docker run --rm --platform linux/amd64 \
+  azertab/aks-nodepool-monitor:latest \
+  --help
+```
+
+Proper fix: publish a multi-architecture image:
+
+```yaml
+platforms: linux/amd64,linux/arm64
+```
+
+---
+
+### Azure CLI fails with read-only filesystem errors
+
+Example:
+
+```text
+Read-only file system: '/root/.azure/versionCheck.json'
+```
+
+Cause: `~/.azure` was mounted read-only.
+
+Incorrect:
+
+```bash
+-v ~/.azure:/root/.azure:ro
+```
+
+Correct:
+
+```bash
+-v ~/.azure:/root/.azure
+```
+
+---
+
+### Azure authorization failure
+
+Example:
+
+```text
+AuthorizationFailed
+does not have authorization to perform action Microsoft.Resources/subscriptions/resourcegroups/read
+```
+
+This usually means one of the following:
+
+* The Azure CLI session is stale.
+* You are logged in as the wrong KodeKloud user.
+* The resource group name is from a previous playground session.
+* The subscription ID does not match the current playground subscription.
+
+Check your current Azure session:
+
+```bash
+az account show -o table
+```
+
+Check available resource groups:
+
+```bash
+az group list -o table
+```
+
+Refresh login if needed:
+
+```bash
+az logout
+az login
+```
+
+---
+
+### Kubernetes `Forbidden` error
+
+Example:
+
+```text
+Error from server (Forbidden): nodes is forbidden
+```
+
+For AAD-enabled AKS clusters, retrieve admin credentials:
+
+```bash
+az aks get-credentials \
+  --resource-group "$RG" \
+  --name "$AKS" \
+  --admin \
+  --overwrite-existing
+```
+
+---
+
+### `crypto is not defined`
+
+This is a Node.js runtime issue, not a Docker issue.
+
+Fix the application by ensuring Node crypto is available explicitly. For example:
+
+```ts
+import { webcrypto } from "node:crypto";
+
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, "crypto", {
+    value: webcrypto,
+    configurable: true
+  });
+}
+```
+
+Load this polyfill before the application imports Azure or Kubernetes SDK modules.
+
+---
+
+## Image Size Notes
+
+The production image includes:
+
+* Node.js runtime
+* Azure CLI
+* kubectl
+* Production Node.js dependencies
+
+Because Azure CLI is included, the image is larger than a minimal Node.js CLI image.
+
+Development dependencies should be omitted in the production image with:
+
+```bash
+npm ci --omit=dev
+```
+
+---
+
+## Cleanup
+
+Delete the AKS cluster when you are done:
+
+```bash
+az aks delete \
+  --resource-group "$RG" \
+  --name "$AKS" \
+  --yes
+```
+
+Remove local reports:
+
+```bash
+rm -rf reports
+```
+
+Remove the local Docker image:
+
+```bash
+docker rmi azertab/aks-nodepool-monitor:latest
+```

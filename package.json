@@ -1,6 +1,6 @@
 {
   "name": "@azer-tab/aks-nodepool-monitor",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "CLI tool to detect AKS node pool provisioning issues and analyze workload resilience.",
   "main": "dist/index.js",
   "bin": {
