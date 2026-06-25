@@ -66,7 +66,7 @@ COPY package*.json ./
 COPY --from=builder /build/dist ./dist
 
 # Install only production dependencies
-RUN npm@5 --omit=dev
+RUN npm ci --omit=dev
 
 # Run the compiled Node.js application
 ENTRYPOINT ["node", "dist/index.js"]
