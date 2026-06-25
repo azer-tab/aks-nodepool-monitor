@@ -16,6 +16,29 @@ The CLI reads configuration from command-line arguments first, then falls back t
 
 `recentFailures` is currently a placeholder and returns an empty list. Azure Activity Log querying can be added later if historical provisioning-failure analysis is required.
 
+## Docker Usage
+
+The AKS Nodepool Monitor can be run as a Docker container. The image includes Node.js, Azure CLI, kubectl, and the compiled monitor application.
+
+For full Docker build, run, AKS playground, and troubleshooting instructions, see:
+
+[DOCKER.md](./DOCKER.md)
+
+Quick run example:
+
+```bash
+docker run --rm \
+  -v ~/.azure:/root/.azure \
+  -v ~/.kube:/root/.kube \
+  -v "$(pwd)/reports:/app/reports" \
+  azertab/aks-nodepool-monitor:latest \
+  --subscription-id "<subscription-id>" \
+  --resource-group "<resource-group>" \
+  --cluster-name "<cluster-name>" \
+  --report-path "/app/reports/report.json" \
+  --print-console
+```
+
 ## Requirements
 
 - Node.js 18 or newer.
