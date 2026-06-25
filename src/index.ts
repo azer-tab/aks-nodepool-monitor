@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./polyfills";
 import 'dotenv/config';
 import { AzureCollector } from './collectors/azure-collector';
 import { KubernetesCollector } from './collectors/kubernetes-collector';
