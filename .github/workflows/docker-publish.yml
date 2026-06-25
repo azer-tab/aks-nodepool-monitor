@@ -36,8 +36,22 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
+          # Use the repository root as the Docker build context
           context: .
+
+          # Use the Dockerfile in the repository root
           file: ./Dockerfile
+
+          # Push the built image to Docker Hub
           push: true
+
+          # Build both amd64 and arm64 image variants
+          # amd64 works on most Linux servers and Intel/AMD machines
+          # arm64 works on Apple Silicon Macs and ARM servers
+          platforms: linux/amd64,linux/arm64
+
+          # Push multiple tags for the same image build
           tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:${{ steps.timestamp.outputs.value }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/aks-nodepool-monitor:${{ github.sha }}

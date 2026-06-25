@@ -22,11 +22,14 @@ RUN npm run build
 # Start the smaller production runtime image
 FROM node:18-alpine
 
+# Set the target architecture for the build
+ARG TARGETARCH
+
+# Expose Docker Buildx target architecture to the Dockerfile
+# Buildx sets this automatically when using platforms like linux/amd64 or linux/arm64
+ARG TARGETARCH
+
 # Install OS-level tools required by the app and CLI tools
-# - curl: downloads kubectl and Kubernetes version metadata
-# - bash: required by some CLI scripts
-# - python3 / py3-pip / py3-virtualenv: required for Azure CLI
-# - ca-certificates: enables HTTPS certificate validation
 RUN apk add --no-cache \
     curl \
     bash \
@@ -47,8 +50,13 @@ RUN apk add --no-cache \
     # Make the az command available globally
     && ln -s /opt/az/bin/az /usr/local/bin/az \
     \
-    # Download the latest stable kubectl binary for Linux AMD64
-    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    # Store the current target architecture from Docker Buildx
+    # For linux/amd64 this becomes amd64
+    # For linux/arm64 this becomes arm64
+    && KUBECTL_ARCH="$TARGETARCH" \
+    \
+    # Download kubectl for the correct CPU architecture
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/${KUBECTL_ARCH}/kubectl" \
     \
     # Mark kubectl as executable
     && chmod +x kubectl \
