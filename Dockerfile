@@ -32,28 +32,44 @@ RUN apk add --no-cache \
     bash \
     python3 \
     py3-pip \
-    && pip3 install --no-cache-dir azure-cli \
+    py3-virtualenv \
+    ca-certificates \
+    \
+    # Create an isolated Python virtual environment for Azure CLI
+    && python3 -m venv /opt/az \
+    \
+    # Upgrade pip inside the virtual environment
+    && /opt/az/bin/pip install --no-cache-dir --upgrade pip \
+    \
+    # Install Azure CLI inside the virtual environment
+    && /opt/az/bin/pip install --no-cache-dir azure-cli \
+    \
+    # Make the az command available globally
+    && ln -s /opt/az/bin/az /usr/local/bin/az \
+    \
+    # Download the latest stable kubectl binary for Linux AMD64
     && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    \
+    # Mark kubectl as executable
     && chmod +x kubectl \
+    \
+    # Move kubectl into the system PATH
     && mv kubectl /usr/local/bin/
 
+# Set the working directory for the production app
 WORKDIR /app
 
-# Copy package.json for runtime reference
+# Copy package metadata for production dependency installation
 COPY package.json ./
 
-# Copy built application from builder
+# Copy the compiled application from the builder stage
 COPY --from=builder /build/dist ./dist
 
 # Install only production dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
-# Set permissions for non-root execution (optional, for security)
-# RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
-# USER appuser
-
-# Default entrypoint
+# Run the compiled Node.js application
 ENTRYPOINT ["node", "dist/index.js"]
 
-# Default command - show help if no args provided
+# Show help by default when no command arguments are provided
 CMD ["--help"]
