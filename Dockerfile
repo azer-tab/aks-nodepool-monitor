@@ -25,10 +25,6 @@ FROM node:18-alpine
 # Set the target architecture for the build
 ARG TARGETARCH
 
-# Expose Docker Buildx target architecture to the Dockerfile
-# Buildx sets this automatically when using platforms like linux/amd64 or linux/arm64
-ARG TARGETARCH
-
 # Install OS-level tools required by the app and CLI tools
 RUN apk add --no-cache \
     curl \
