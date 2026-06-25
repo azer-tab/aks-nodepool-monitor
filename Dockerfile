@@ -60,13 +60,13 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy package metadata for production dependency installation
-COPY package.json ./
+COPY package*.json ./
 
 # Copy the compiled application from the builder stage
 COPY --from=builder /build/dist ./dist
 
 # Install only production dependencies
-RUN npm ci --omit=dev
+RUN npm@5 --omit=dev
 
 # Run the compiled Node.js application
 ENTRYPOINT ["node", "dist/index.js"]
