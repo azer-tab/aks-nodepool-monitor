@@ -1,25 +1,32 @@
 # Multi-stage build for optimized image size
 FROM node:18-alpine AS builder
 
+# Set the working directory for the build stage
 WORKDIR /build
 
-# Copy package files
+# Copy dependency manifests first to improve Docker layer caching
 COPY package*.json ./
 
-# Install dependencies (all for build phase)
+# Install all dependencies needed to build the TypeScript project
 RUN npm ci
 
-# Copy source
+# Copy TypeScript configuration
 COPY tsconfig.json ./
+
+# Copy application source code
 COPY src ./src
 
-# Build
+# Compile TypeScript into JavaScript
 RUN npm run build
 
-# Production stage
+# Start the smaller production runtime image
 FROM node:18-alpine
 
-# Install required tools: Azure CLI, kubectl
+# Install OS-level tools required by the app and CLI tools
+# - curl: downloads kubectl and Kubernetes version metadata
+# - bash: required by some CLI scripts
+# - python3 / py3-pip / py3-virtualenv: required for Azure CLI
+# - ca-certificates: enables HTTPS certificate validation
 RUN apk add --no-cache \
     curl \
     bash \
